@@ -1,0 +1,97 @@
+name: Deploy Vm Bot
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  test:
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Syntax check
+        run: |
+          find . -name "*.py" -not -path "./venv/*" | xargs python -m py_compile
+          echo "All Python files OK"
+      - name: Validate docker-compose
+        run: docker compose -f deploy/docker-compose.yml config --quiet && echo "docker-compose.yml valid"
+
+  build:
+    name: Build and Push Docker
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ steps.meta.outputs.tags }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+
+  deploy:
+    name: Deploy to Server
+    runs-on: ubuntu-latest
+    needs: build
+    environment:
+      name: production
+      url: http://${{ secrets.SERVER_HOST }}:8080
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          script: |
+            set -e
+            cd ~/Vm 2>/dev/null || git clone https://github.com/Narco995/Vm.git ~/Vm && cd ~/Vm
+            git pull origin main
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker compose -f deploy/docker-compose.yml pull
+            docker compose -f deploy/docker-compose.yml up -d --remove-orphans --force-recreate
+            docker image prune -f
+            echo "Deploy complete - Build ${{ github.run_number }}"
+            docker compose -f deploy/docker-compose.yml ps
+      - name: Summary
+        if: success()
+        run: |
+          echo "Deployed build ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "Bot: t.me/Gituabibot" >> $GITHUB_STEP_SUMMARY
