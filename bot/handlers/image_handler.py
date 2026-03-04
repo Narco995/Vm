@@ -16,7 +16,9 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await db.get_or_create_user(user.id, user.username or "", user.first_name or "")
 
     caption = update.message.caption or "Describe and analyze this image in detail."
-    msg = await update.message.reply_text("🖼 Analyzing image with GPT-4 Vision...")
+    providers = ai.get_available_providers()
+    provider_text = ", ".join(providers) if providers else "Gemini"
+    msg = await update.message.reply_text(f"🖼 Analyzing image with vision-capable providers ({provider_text})...")
 
     try:
         photo = update.message.photo[-1]

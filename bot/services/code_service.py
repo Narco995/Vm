@@ -6,6 +6,7 @@ import tempfile
 import traceback
 from config import CODE_EXECUTION_TIMEOUT, TEMP_DIR
 from bot.services.ai_service import AIService
+from bot.services.llm_providers.base import TaskType
 
 
 class CodeService:
@@ -27,7 +28,8 @@ Requirements:
 - Return ONLY the Python code, no markdown fences"""
         }]
 
-        code = await self.ai.chat(messages, style="concise")
+        # Use coding-optimized provider
+        code = await self.ai.chat(messages, style="concise", task_type=TaskType.CODING)
         code = code.strip()
         if code.startswith("```python"):
             code = code[9:]
@@ -80,4 +82,5 @@ Requirements:
             "role": "user",
             "content": f"Explain this code clearly:\n\n```python\n{code}\n```"
         }]
-        return await self.ai.chat(messages, style=style)
+        # Use reasoning-optimized provider for code explanation
+        return await self.ai.chat(messages, style=style, task_type=TaskType.REASONING)

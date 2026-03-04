@@ -34,14 +34,22 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
          InlineKeyboardButton("⚙️ Automations", callback_data="help_auto")],
     ]
 
+    # Get available providers
+    providers = ai.get_available_providers()
+    provider_list = ", ".join(providers) if providers else "OpenAI"
+    
     await update.message.reply_text(
         f"🤖 *Welcome, {user.first_name}!*\n\n"
-        "I'm your advanced AI assistant powered by *GPT-4o*, *Whisper*, *DALL-E 3*, and *Mistral AI*.\n\n"
+        f"I'm your advanced AI assistant powered by multiple LLM providers: *{provider_list}*.\n\n"
         "I can help you with:\n"
         "📄 Documents & PDFs • 💻 Code Execution\n"
-        "🔬 Deep Research • 🖼 Image Generation\n"
+        "🔬 Deep Research • 🖼 Image Analysis\n"
         "🎙 Voice Messages • 📊 Data Analysis\n"
         "🧠 Long-term Memory • ⚙️ Automation\n\n"
+        "Features:\n"
+        "⚡ *Auto-routing* - Uses best provider for each task\n"
+        "🔄 *Auto-fallback* - Switches providers on errors\n"
+        "🎯 *Task-optimized* - Fast chat, deep reasoning, code generation\n\n"
         "Just send me a message or use /help for all commands!",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(keyboard)
@@ -271,6 +279,17 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     autos = await db.get_automations(update.effective_user.id)
     notes = await db.get_memory_notes(update.effective_user.id)
     style = await db.get_user_style(update.effective_user.id)
+    
+    # Get provider status
+    provider_status = ai.get_status()
+    providers_info = provider_status.get("providers", {})
+    
+    provider_text = ""
+    for name, info in providers_info.items():
+        status = "✅" if info.get("available", False) else "❌"
+        errors = info.get("error_count", 0)
+        error_text = f" ({errors} errors)" if errors > 0 else ""
+        provider_text += f"{status} {name}{error_text}\n"
 
     await update.message.reply_text(
         f"📊 *Bot Status*\n\n"
@@ -279,7 +298,8 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📋 Tasks completed: {len(tasks)}\n"
         f"⚙️ Automations: {len(autos)}\n"
         f"🧠 Memory notes: {len(notes)}\n\n"
-        f"🤖 Models: GPT-4o • DALL-E 3 • Whisper • Mistral Large\n"
+        f"🤖 *Active Providers:*\n{provider_text}"
+        f"⚡ Auto-routing enabled\n"
         f"✅ All systems operational",
         parse_mode="Markdown"
     )

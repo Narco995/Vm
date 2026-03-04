@@ -12,6 +12,7 @@ class PDFService:
         self.ai = AIService()
 
     async def generate_pdf(self, topic: str, user_id: int) -> str:
+        # Generate report content (will use optimized provider for long context)
         content = await self.ai.generate_report(topic)
 
         pdf = FPDF()
